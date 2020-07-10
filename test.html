@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<meta charset="UTF-8">
+<html>
+<head>
+  <title>Online Asymptote compiler v2</title>
+<style>
+  a {
+    color: inherit;
+  }
+
+  body {
+    margin: 0;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: row;
+  }
+  body > * {
+    flex: 1;
+  }
+
+  #output_pane {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #output {
+    flex: 1;
+  }
+
+</style>
+</head>
+<body>
+  <textarea id="contents"></textarea>
+  <div id="output_pane">
+    <button id="compile" onclick="compile();">Скомпилировать</button>
+    <div id="output"></div>
+  </div>
+</body>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<script>
+    async function compile() {
+        var asy_source = $("#contents").val();
+        var socket = new WebSocket("ws://" + document.location.host + "/asy");
+        var values = [], antivalues = [], error = null;
+        socket.onmessage = function(event) {
+            if (antivalues.length > 0) {
+                let [resolve, reject] = antivalues.shift();
+                resolve(event.data);
+                return;
+            }
+            values.push([event.data, null]);
+        }
+        socket.onerror = function(event) {
+            error = new Error("websocket error");
+            if (antivalues.length > 0) {
+                let [resolve, reject] = antivalues.shift();
+                reject(error);
+                return;
+            }
+            values.push([null, error]);
+        }
+        socket.onclose = function(event) {
+            error = new Error("websocket closed");
+            if (antivalues.length > 0) {
+                let [resolve, reject] = antivalues.shift();
+                reject(error);
+                return;
+            }
+            values.push([null, error]);
+        }
+        async function next_value() {
+            if (values == null)
+                throw error;
+            if (values.length > 0) {
+                let [value, error] = values.shift();
+                if (error != null) {
+                    values = null;
+                    throw error;
+                }
+                return value;
+            }
+            return await new Promise( (resolve, reject) => {
+                antivalues.push([resolve, reject]);
+            });
+        }
+        await new Promise((resolve, reject) => {
+            socket.onopen = resolve;
+            antivalues.push([resolve, reject]);
+        }).then(() => {
+            antivalues.pop();
+        })
+        socket.send("add main.asy");
+        socket.send(new Blob([asy_source]));
+        socket.send("format svg");
+        socket.send("run main.asy");
+        console.log(await next_value());
+        socket.close();
+    }
+</script>
+</html>
