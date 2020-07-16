@@ -91,10 +91,10 @@
         }).then(() => {
             antivalues.pop();
         })
-        socket.send("add main.asy");
+        socket.send("add " + JSON.stringify({filename: "main.asy", main: true}));
         socket.send(new Blob([asy_source]));
-        socket.send("format svg");
-        socket.send("run main.asy");
+        socket.send("options " + JSON.stringify({format: "svg", verbosity: 3}));
+        socket.send("run");
         console.log(await next_value());
         socket.close();
     }

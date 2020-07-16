@@ -13,31 +13,35 @@ Incoming messages may include
         filename must have .asy extension;
         may allow other extensions
     "options {
+        interactive: <bool>,
+            default is false
         timeout: <integer milliseconds>,
         format: <"svg"/"pdf"/"png">,
             default is "svg"
         stderr: "separate" or "stdout",
-            default is "separate"
-        verbose: <0/1/2/3>,
+            default is "stdout"
+        verbosity: <0/1/2/3>,
             default is 0
     }"
+        (all options are optional, lol)
 then, once
-    "run" or "interactive"
+    "run"
 then
     "options {timeout: <integer milliseconds>}"
         to further limit execution time
-or, after "interactive"
+or, if interactive
     "input" b"<string>"
 Closing the connection aborts execution and clears residual files.
 
 Outcoming messages may include
     "result {format: <"svg"/"pdf"/"png">}" b"<image contents>"
-    "output {type: <"stdout"/"stderr">}" b"<output>"
+    "output {stream: <"stdout"/"stderr">}" b"<output>"
     "complete {
         success: true/false,
-        error: <null or message>,
+        error: <message>,
+            optional
         time: <integer milliseconds>,
-            how long did the execution take
+            optional, how long did the execution take
     }"
 When the task completes, connection is closed.
 
@@ -53,36 +57,39 @@ Source location: queue/
 
 Server that supports WebSocket-based protocol at "/asy"
 
+XXX make interactive an option
+
 Incoming messages may include
     "add {
         filename: <file name>,
         main: true/false,
         hash: <SHA265 hex file hash>,
     }" b"<file contents>"
-        filename must have .asy extension;
-        may allow other extensions
+        filename must have .asy extension
+        (may allow other extensions in future)
     "add {
         filename: <file name>,
         main: true/false,
         hash: <SHA-265 hex file hash>,
         restore: true,
     }"
-        only works on recently uploaded files.
-        Client must wait for corresponding "restored_source" messages
-        before asking for execution.
+        only works on recently uploaded files
     "options {
+        interactive: <bool>,
+            default is false
         timeout: <integer milliseconds>,
             timeout should be one of 3000, 10000, or 30000
         format: <"svg"/"pdf"/"png">,
             default is "svg"
         stderr: "separate" or "stdout",
-            default is "separate"
-        verbose: <0/1/2/3>,
+            default is "stdout"
+        verbosity: <0/1/2/3>,
             default is 0
     }"
+        (all options are optional, lol)
 then, once
-    "run" or "interactive"
-after "interactive"
+    "run"
+after interactive "run"
     "input" b"<string>"
 Closing the connection aborts execution.
 
@@ -98,7 +105,7 @@ Outcoming messages may include
             optional
     }"
     "result {format: <"svg"/"pdf"/"png">}" b"<image contents>"
-    "output {type: <"stdout"/"stderr">}" b"<output>"
+    "output {stream: <"stdout"/"stderr">}" b"<output>"
     "complete {
         success: true/false,
         error: <message>,
@@ -107,10 +114,9 @@ Outcoming messages may include
             optional, how long did the execution take
     }"
     "denied {error: <message>}"
-        in response to interactive only; connection closes.
-        <message> here may suggest reconnecting (if there is possibility that
-        enough resources are going to be freed right now), or not (if there is
-        a large queue)
+        indicates that error occured before executing any asymptote code
+        like an error in arguments, or full queue in response to interactive
+        request
 When the task completes or is denied, connection is closed.
 
 ### Queue
