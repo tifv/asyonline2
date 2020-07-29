@@ -1,49 +1,106 @@
-### Asymptote server (kinda backend)
+### Server (universal)
 
-Source location: runasy/
+WebSocket sub-protocols at "/asy"
+• asyonline/asy
+• asyonline/asy+restore
 
-Server supports WebSocket-based protocol at "/".
-Only 1 simultaneous connection is supported
+WebSocket sub-protocols at "/asy/interactive"
+• asyonline/asy/interactive
+• asyonline/asy/interactive+restore
 
-Incoming messages may include
+Here
+  • "restore" means that server accepts "restore" parameter to "add" messages,
+    restoring recent source files instead of rereceiving them;
+  • "interactive" means that server will run an Asymptote shell.
+
+If any protocol is supported by server, then all “lesser” protocols also
+should be supported.
+
+#### Protocol, stage 1
+
+Incoming messages:
     "add {
         filename: <file name>,
-        main: true/false
     }" b"<file contents>"
-        filename must have .asy extension;
-        may allow other extensions
+        filename must have .asy extension
+        (though may allow other extensions in future)
     "options {
-        interactive: <bool>,
-            default is false
         timeout: <integer milliseconds>,
+            optional, should be one of 3000, 10000, or 30000
+            default is server-decided
+            server may impose an additional limit on timeout
+            must be absent if sub-protocol is "interactive"
         format: <"svg"/"pdf"/"png">,
-            default is "svg"
+            optional, default is "svg"
         stderr: "separate" or "stdout",
-            default is "stdout"
+            optional, default is "stdout"
         verbosity: <0/1/2/3>,
-            default is 0
+            optional, default is 0
     }"
-        (all options are optional, lol)
-then, once
-    "run"
-then
-    "options {timeout: <integer milliseconds>}"
-        to further limit execution time
-or, if interactive
-    "input" b"<string>"
-Closing the connection aborts execution and clears residual files.
 
-Outcoming messages may include
+Also incoming messages if the sub-protocol contains "restore":
+    "add {
+        filename: <file name>,
+        hash: <SHA265 hex file hash>,
+    }" b"<file contents>"
+    "add {
+        filename: <file name>,
+        hash: <SHA-265 hex file hash>,
+        restore: true,
+    }"
+
+Outcoming messages:
+    "deny {error: <message>}"
+        indicates that an error occured before actually handling the task
+        (like an error in arguments, or an overloaded server)
+
+#### Protocol, stage switching
+
+Incoming message
+    "run {
+        main: <filename>
+            skipped/ignored if sub-protocol is "interactive"
+    }"
+switches stage 1 to stage 2.
+
+#### Protocol, stage 2
+
+Outcoming messages if sub-protocol contains "restore"
+    "missing [{
+        filename: <file name>,
+        hash: <SHA265 hex file hash>,
+    }, …]"
+switches back to stage 1, can be sent only once;
+suggests that all missing files must be readded.
+
+In "interactive+restore" sub-protocol, if the client used "restore" feature,
+the server must send possibly empty "output" message (see below) to inform
+the client that all files were restored successfully.
+
+Incoming messages:
+    "options {timeout: <integer milliseconds>}"
+        further limit exection timeout that was set earlier
+
+Incoming messages in "interactive" sub-protocol:
+    "input {}" b"<string>"
+        In "interactive+restore" sub-protocol, if the client used "restore"
+        feature, it must not send "input" message until at least one "output"
+        message is received
+
+Outcoming messages:
+    "queue {
+        estimate: <integer milliseconds>,
+    }"
+        non-positive "estimate" implies that execution had already started
     "result {format: <"svg"/"pdf"/"png">}" b"<image contents>"
     "output {stream: <"stdout"/"stderr">}" b"<output>"
     "complete {
         success: true/false,
         error: <message>,
             optional
-        time: <integer milliseconds>,
-            optional, how long did the execution take
     }"
-When the task completes, connection is closed.
+    "deny {error: <message>}"
+        see stage 1
 
 Error messages may include:
     • "Execution aborted due to the time limit (<integer milliseconds>ms)"
@@ -51,73 +108,10 @@ Error messages may include:
     • "Execution failed with code <return code>"
     • "No image output"
 
-### Queue server (kinda fronend)
-
-Source location: queue/
-
-Server that supports WebSocket-based protocol at "/asy"
-
-XXX make interactive an option
-
-Incoming messages may include
-    "add {
-        filename: <file name>,
-        main: true/false,
-        hash: <SHA265 hex file hash>,
-    }" b"<file contents>"
-        filename must have .asy extension
-        (may allow other extensions in future)
-    "add {
-        filename: <file name>,
-        main: true/false,
-        hash: <SHA-265 hex file hash>,
-        restore: true,
-    }"
-        only works on recently uploaded files
-    "options {
-        interactive: <bool>,
-            default is false
-        timeout: <integer milliseconds>,
-            timeout should be one of 3000, 10000, or 30000
-        format: <"svg"/"pdf"/"png">,
-            default is "svg"
-        stderr: "separate" or "stdout",
-            default is "stdout"
-        verbosity: <0/1/2/3>,
-            default is 0
-    }"
-        (all options are optional, lol)
-then, once
-    "run"
-after interactive "run"
-    "input" b"<string>"
-Closing the connection aborts execution.
-
-Outcoming messages may include
-    "missing [{
-        filename: <file name>,
-        hash: <SHA265 hex file hash>,
-    }, …]"
-        (this is a request for reupload, giving a second chance to "run")
-    "queue {
-        passed: true/false,
-        estimate: <integer milliseconds>,
-            optional
-    }"
-    "result {format: <"svg"/"pdf"/"png">}" b"<image contents>"
-    "output {stream: <"stdout"/"stderr">}" b"<output>"
-    "complete {
-        success: true/false,
-        error: <message>,
-            optional
-        time: <integer milliseconds>,
-            optional, how long did the execution take
-    }"
-    "denied {error: <message>}"
-        indicates that error occured before executing any asymptote code
-        like an error in arguments, or full queue in response to interactive
-        request
 When the task completes or is denied, connection is closed.
+
+Closing connection in any case aborts execution and clears residual files.
+
 
 ### Queue
 
@@ -127,7 +121,7 @@ a task may also lack specific timeout (“default”).
 
 Besides all that, there are “interactive” tasks that provide Asymptote shell.
 
--- Queue principles --
+#### Queue principles
 
 XXX generalize to multiple limits.
 

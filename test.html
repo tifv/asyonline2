@@ -42,7 +42,7 @@
 <script>
     async function compile() {
         var asy_source = $("#contents").val();
-        var socket = new WebSocket("ws://" + document.location.host + "/asy");
+        var socket = new WebSocket("ws://" + document.location.host + "/asy", ["asyonline/asy"]);
         var values = [], antivalues = [], error = null;
         socket.onmessage = function(event) {
             if (antivalues.length > 0) {
@@ -91,10 +91,10 @@
         }).then(() => {
             antivalues.pop();
         })
-        socket.send("add " + JSON.stringify({filename: "main.asy", main: true}));
+        socket.send("add " + JSON.stringify({filename: "main.asy"}));
         socket.send(new Blob([asy_source]));
         socket.send("options " + JSON.stringify({format: "svg", verbosity: 3}));
-        socket.send("run");
+        socket.send("run " + JSON.stringify({main: "main.asy"}));
         console.log(await next_value());
         socket.close();
     }
