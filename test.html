@@ -93,10 +93,12 @@
         })
         socket.send("add " + JSON.stringify({filename: "main.asy"}));
         socket.send(new Blob([asy_source]));
-        socket.send("options " + JSON.stringify({format: "svg", verbosity: 3}));
+        socket.send("options " + JSON.stringify({format: "svg", verbosity: 3, stderrRedir: true}));
         socket.send("run " + JSON.stringify({main: "main.asy"}));
-        console.log(await next_value());
-        socket.close();
+        while (true) {
+            console.log(await next_value());
+        }
+        //socket.close();
     }
 </script>
 </html>
