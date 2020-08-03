@@ -112,14 +112,14 @@ func timerLoop(
 ) {
     defer close(end)
     var duration time.Duration = -1
-    var st, et time.Time
+    var st time.Time
     var endish <-chan void
     var makeEndish = func() <-chan void {
         endish := make(chan void)
         go func(et time.Time, endish chan<- void) {
             time.Sleep(time.Until(et))
             close(endish)
-        }(et, endish)
+        }(st.Add(duration), endish)
         return endish
     }
     for {
@@ -134,7 +134,6 @@ func timerLoop(
             if duration < 0 || d < duration {
                 duration = d
                 if !st.IsZero() {
-                    et = st.Add(duration)
                     endish = makeEndish()
                 }
             }
@@ -142,7 +141,6 @@ func timerLoop(
             start = nil
             st = time.Now()
             if duration >= 0 {
-                et = st.Add(duration)
                 endish = makeEndish()
             }
         case <-stopped:
