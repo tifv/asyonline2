@@ -227,7 +227,6 @@ func (task *Task) Run(mainname string) error {
         return err
     }
     task.timer.setDuration(time.Duration(30e9))
-    task.timer.durations <- time.Duration(30e9)
     // XXX avoid race conditions in setting format, stderr, etc.
     // (probably just disable setting them after starting runloop)
     go task.runloop(mainname)
