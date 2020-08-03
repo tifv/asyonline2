@@ -106,6 +106,13 @@ func newTimer(stopped <-chan void) timer {
     return timer{durations, start, end}
 }
 
+func (timer *timer) setDuration(duration time.Duration) {
+    select {
+    case timer.durations <- duration:
+    case <-timer.end:
+    }
+}
+
 func timerLoop(
     durations <-chan time.Duration, start <-chan void, end chan<- void,
     stopped <-chan void,
@@ -184,7 +191,7 @@ func (task *Task) SetDuration(duration float32) error {
     if duration < 0 {
         return reply.Error("'duration' must be nonnegative")
     }
-    task.timer.durations <- time.Duration(int64(1e9 * duration))
+    task.timer.setDuration(time.Duration(1e9 * duration))
     return nil
 }
 
@@ -219,6 +226,7 @@ func (task *Task) Run(mainname string) error {
     if err := checkFilename(mainname); err != nil {
         return err
     }
+    task.timer.setDuration(time.Duration(30e9))
     task.timer.durations <- time.Duration(30e9)
     // XXX avoid race conditions in setting format, stderr, etc.
     // (probably just disable setting them after starting runloop)
