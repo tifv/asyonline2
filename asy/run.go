@@ -2,27 +2,28 @@ package asy
 
 import (
     "errors"
-    "strings"
-    "sync"
-    "time"
-
     "fmt"
     "io"
-    "path/filepath"
-
     "io/ioutil"
     "log"
     "os"
+    "path/filepath"
+    "strings"
+    "time"
 
     "golang.org/x/sys/unix"
 
+    "../common/stopper"
     "../server/reply"
 )
 
 type void = struct{}
 
+const maxDuration float64 = 30
+const nanosecond = 1e-9
+
 type conn interface {
-    Stop()
+    //Stop()
     //Deny(err error)
     SendOutput(stream string, output []byte) error
     SendResult(format string, contents []byte) error
@@ -30,38 +31,20 @@ type conn interface {
 }
 
 type Task struct {
-    stopper
+    stopper.Stopper
     conn        conn
     workdir     string
-    timer       timer
+    timer       *timer
     format      string
     stderrRedir bool
     verbosity   int
-}
-
-type stopper struct {
-    Stopped  <-chan void
-    stopFunc func()
-}
-
-func newStopper() stopper {
-    var stopped = make(chan void)
-    var once sync.Once
-    var stop = func() { close(stopped) }
-    return stopper{
-        Stopped:  stopped,
-        stopFunc: func() { once.Do(stop) },
-    }
-}
-
-func (s stopper) Stop() {
-    s.stopFunc()
+    started     bool
 }
 
 func NewTask(conn conn) (*Task, error) {
     task := &Task{
         conn:        conn,
-        stopper:     newStopper(),
+        Stopper:     stopper.New(),
         format:      "svg",
         stderrRedir: true,
         verbosity:   0,
@@ -96,14 +79,18 @@ type timer struct {
     durations chan<- time.Duration
     start     chan<- void
     end       <-chan void
+
+    // only timer loop can access this before end
+    duration time.Duration
 }
 
-func newTimer(stopped <-chan void) timer {
+func newTimer(stopped <-chan void) *timer {
     durations := make(chan time.Duration)
     start := make(chan void)
     end := make(chan void)
-    go timerLoop(durations, start, end, stopped)
-    return timer{durations, start, end}
+    timer := &timer{durations, start, end, -1}
+    go timer.loop(durations, start, end, stopped)
+    return timer
 }
 
 func (timer *timer) setDuration(duration time.Duration) {
@@ -113,12 +100,11 @@ func (timer *timer) setDuration(duration time.Duration) {
     }
 }
 
-func timerLoop(
+func (timer *timer) loop(
     durations <-chan time.Duration, start <-chan void, end chan<- void,
     stopped <-chan void,
 ) {
     defer close(end)
-    var duration time.Duration = -1
     var st time.Time
     var endish <-chan void
     var makeEndish = func() <-chan void {
@@ -126,20 +112,21 @@ func timerLoop(
         go func(et time.Time, endish chan<- void) {
             time.Sleep(time.Until(et))
             close(endish)
-        }(st.Add(duration), endish)
+        }(st.Add(timer.duration), endish)
         return endish
     }
     for {
         select {
-        case d := <-durations:
-            if d < 0 {
+        case duration := <-durations:
+            if duration < 0 {
                 panic("timer duration must not be negative")
             }
-            if d == 0 {
+            if duration == 0 {
+                timer.duration = 0
                 return
             }
-            if duration < 0 || d < duration {
-                duration = d
+            if timer.duration < 0 || duration < timer.duration {
+                timer.duration = duration
                 if !st.IsZero() {
                     endish = makeEndish()
                 }
@@ -147,7 +134,7 @@ func timerLoop(
         case <-start:
             start = nil
             st = time.Now()
-            if duration >= 0 {
+            if timer.duration >= 0 {
                 endish = makeEndish()
             }
         case <-stopped:
@@ -159,6 +146,10 @@ func timerLoop(
 }
 
 func (task *Task) AddFile(filename string, contents []byte) error {
+    // XXX impose total limit of 128kiB on input file size
+    if task.started {
+        return reply.Error("The task has already started, cannot add files")
+    }
     if err := checkFilename(filename); err != nil {
         return err
     }
@@ -187,15 +178,18 @@ func checkFilename(filename string) error {
     return nil
 }
 
-func (task *Task) SetDuration(duration float32) error {
-    if duration < 0 {
+func (task *Task) SetDuration(duration float64) error {
+    if !(duration > 0) {
         return reply.Error("'duration' must be nonnegative")
     }
-    task.timer.setDuration(time.Duration(1e9 * duration))
+    task.timer.setDuration(time.Duration(duration / nanosecond))
     return nil
 }
 
 func (task *Task) SetFormat(format string) error {
+    if task.started {
+        return reply.Error("The task has already started, cannot set options")
+    }
     switch format {
     case "svg", "pdf", "png":
     default:
@@ -207,11 +201,17 @@ func (task *Task) SetFormat(format string) error {
 }
 
 func (task *Task) SetStderrRedir(stderrRedir bool) error {
+    if task.started {
+        return reply.Error("The task has already started, cannot set options")
+    }
     task.stderrRedir = stderrRedir
     return nil
 }
 
 func (task *Task) SetVerbosity(verbosity int) error {
+    if task.started {
+        return reply.Error("The task has already started, cannot set options")
+    }
     switch verbosity {
     case 0, 1, 2, 3:
     default:
@@ -222,18 +222,20 @@ func (task *Task) SetVerbosity(verbosity int) error {
     return nil
 }
 
-func (task *Task) Run(mainname string) error {
+func (task *Task) Start(mainname string) error {
+    if task.started {
+        return reply.Error("The task has already started, cannot start again")
+    }
     if err := checkFilename(mainname); err != nil {
         return err
     }
-    task.timer.setDuration(time.Duration(30e9))
-    // XXX avoid race conditions in setting format, stderr, etc.
-    // (probably just disable setting them after starting runloop)
-    go task.runloop(mainname)
+    task.timer.setDuration(time.Duration(maxDuration / nanosecond))
+    task.started = true
+    go task.runLoop(mainname)
     return nil
 }
 
-func (task *Task) runloop(mainname string) {
+func (task *Task) runLoop(mainname string) {
     defer task.Stop()
     outname := filepath.Join(task.workdir, "output."+task.format)
     asyArgs := []string{
@@ -349,8 +351,8 @@ func (task *Task) runloop(mainname string) {
     {
         var (
             deadRS   = make(chan void)
-            killRS   = make(chan error, 1)
-            killedRS = make(chan error, 1)
+            killRS   = make(chan error)
+            killedRS = make(chan error)
         )
         dead = deadRS
         killed = killedRS
@@ -363,8 +365,12 @@ func (task *Task) runloop(mainname string) {
             case <-task.Stopped:
                 reason = nil
             case <-task.timer.end:
-                // XXX specify the actual limit
-                reason = reply.Error("Process time limit")
+                if task.timer.duration > 0 {
+                    reason = reply.Error(fmt.Sprintf("Process reached time limit (%.1fs)",
+                        float64(task.timer.duration)*nanosecond))
+                } else {
+                    reason = reply.Error("Process was stopped")
+                }
             }
             select {
             case kill <- reason:
@@ -462,9 +468,9 @@ func readLoop(stream *os.File,
     defer close(done)
     defer stream.Close()
     const (
-        bufSize = 1 << 10
-        maxSize = 1 << 19
-        groupBy = 3e6 // nanoseconds
+        bufSize               = 1 << 10
+        maxSize               = 1 << 19
+        groupBy time.Duration = 20e6 // 20ms
     )
     var (
         readbuf [bufSize]byte
@@ -491,7 +497,8 @@ func readLoop(stream *os.File,
                 ended = true
             }
         } else if sent > maxSize {
-            done <- reply.Error(fmt.Sprintf("Process output limit (%dB)", maxSize))
+            done <- reply.Error(fmt.Sprintf("Process reached output limit (%dB)",
+                maxSize))
             ended = true
             n -= (sent - maxSize)
             sent = maxSize
@@ -501,7 +508,7 @@ func readLoop(stream *os.File,
         } else if deadlineEnabled {
             if !deadlineSet {
                 if err := stream.SetReadDeadline(
-                    time.Now().Add(time.Duration(groupBy)),
+                    time.Now().Add(groupBy),
                 ); err != nil {
                     if errors.Is(err, os.ErrNoDeadline) {
                         deadlineEnabled = false

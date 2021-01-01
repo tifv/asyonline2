@@ -8,19 +8,14 @@ import (
     "log"
 
     "./server"
-    "./asy"
+    "./queue"
 )
 
 type void = struct{}
 
 func main() {
-    const capacity = 1
-    gate := make(chan void, capacity)
-    closeGate := func() { <-gate }
-    openGate := func() { gate <- void{} }
-    for i := 0; i < capacity; i++ {
-        openGate()
-    }
+    q := queue.NewQueue()
+    q.AddBackend("localhost:8081")
     mux := http.NewServeMux()
     mux.Handle("/asy", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
         websocket.Server{
@@ -37,14 +32,12 @@ func main() {
                 return errors.New("unknown websocket sub-protocols")
             },
             Handler: websocket.Handler(func(wsconn *websocket.Conn) {
-                closeGate()
-                defer openGate()
                 defer wsconn.Close()
                 var conn *server.Conn
-                var task *asy.Task
+                var task *queue.Task
                 conn = server.NewConn(wsconn, nil)
                 defer conn.Stop()
-                task, err := asy.NewTask(conn)
+                task, err := q.NewTask(conn)
                 if err != nil {
                     conn.Deny(err)
                     return
@@ -59,7 +52,7 @@ func main() {
         }.ServeHTTP(w, req)
     }))
     err := (&http.Server{
-        Addr:    "localhost:8081",
+        Addr:    "localhost:8080",
         Handler: mux,
     }).ListenAndServe()
     log.Fatal(err)

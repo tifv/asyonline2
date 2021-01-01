@@ -1,17 +1,15 @@
 package server
 
 import (
-    "errors"
-    "strings"
-    "sync"
-
     "encoding/json"
+    "errors"
     "io"
-
     "log"
+    "strings"
 
     "golang.org/x/net/websocket"
 
+    "../common/stopper"
     "../server/reply"
 )
 
@@ -19,11 +17,11 @@ type void = struct{}
 
 type task interface {
     AddFile(filename string, contents []byte) error
-    SetDuration(duration float32) error
+    SetDuration(duration float64) error
     SetFormat(format string) error
     SetStderrRedir(stderrRedir bool) error
     SetVerbosity(verbosity int) error
-    Run(mainname string) error
+    Start(mainname string) error
     Stop()
 }
 
@@ -31,39 +29,22 @@ type cache interface {
 }
 
 type Conn struct {
-    stopper
+    stopper.Stopper
     ws    *websocket.Conn
     task  task
     cache cache
-}
-
-type stopper struct {
-    Stopped  <-chan void
-    stopFunc func()
-}
-
-func newStopper() stopper {
-    var stopped = make(chan void)
-    var once sync.Once
-    var stop = func() { close(stopped) }
-    return stopper{
-        Stopped:  stopped,
-        stopFunc: func() { once.Do(stop) },
-    }
-}
-
-func (s stopper) Stop() {
-    s.stopFunc()
 }
 
 func NewConn(ws *websocket.Conn, cache cache) *Conn {
     conn := &Conn{
         ws:      ws,
         cache:   cache,
-        stopper: newStopper(),
+        Stopper: stopper.New(),
     }
     return conn
 }
+
+// XXX we should synchronize all sending methods because Deny may be executed concurrently with e.g. SendResult
 
 func (conn *Conn) Deny(e error) {
     var err error
@@ -162,24 +143,18 @@ func (conn *Conn) Complete(e error) error {
     return nil
 }
 
-//func (conn *Conn) halt() {
-//    if conn.halted != nil {
-//        conn.halted <- true;
-//    }
-//}
-
 func (conn *Conn) HandleWith(task task) {
     conn.task = task
-    go conn.readloop()
+    go conn.receiveLoop()
 }
 
-func (conn *Conn) readloop() {
+func (conn *Conn) receiveLoop() {
     defer conn.Stop()
 
     const (
         addPrefix     = "add "
         optionsPrefix = "options "
-        runPrefix     = "run "
+        startPrefix   = "start "
         inputPrefix   = "input "
     )
 
@@ -234,7 +209,7 @@ func (conn *Conn) readloop() {
             }
         case strings.HasPrefix(message, optionsPrefix):
             var optionsArgs struct {
-                Duration    *float32
+                Duration    *float64
                 Format      *string
                 StderrRedir *bool `json:"stderrRedir"`
                 Verbosity   *int
@@ -269,21 +244,21 @@ func (conn *Conn) readloop() {
                     return
                 }
             }
-        case strings.HasPrefix(message, runPrefix):
-            var runArgs struct {
+        case strings.HasPrefix(message, startPrefix):
+            var startArgs struct {
                 Main *string
             }
             if err := json.Unmarshal(
-                []byte(message[len(runPrefix):]), &runArgs,
+                []byte(message[len(startPrefix):]), &startArgs,
             ); err != nil {
-                conn.Deny(reply.Error("'run' arguments are not a correct JSON"))
+                conn.Deny(reply.Error("'start' arguments are not a correct JSON"))
                 return
             }
-            if runArgs.Main == nil {
-                conn.Deny(reply.Error("'run' must specify a 'main' filename"))
+            if startArgs.Main == nil {
+                conn.Deny(reply.Error("'start' must specify a 'main' filename"))
                 return
             }
-            if err := conn.task.Run(*runArgs.Main); err != nil {
+            if err := conn.task.Start(*startArgs.Main); err != nil {
                 conn.Deny(err)
                 return
             }
@@ -296,3 +271,4 @@ func (conn *Conn) readloop() {
         }
     }
 }
+

@@ -57,7 +57,7 @@ Outcoming messages:
 #### Protocol, stage switching
 
 Incoming message
-    "run {
+    "start {
         main: <filename>
             skipped/ignored if sub-protocol is "interactive"
     }"
@@ -91,9 +91,9 @@ Outcoming messages:
     "queue {
         estimate: <float seconds>,
     }"
-        non-positive "estimate" implies that execution had already started
     "result {format: <"svg"/"pdf"/"png">}" b"<image contents>"
     "output {stream: <"stdout"/"stderr">}" b"<output>"
+        empty output should be sent to indicate the start of the process
     "complete {
         error: <message>,
             optional

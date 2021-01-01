@@ -93,8 +93,8 @@
         })
         socket.send("add " + JSON.stringify({filename: "main.asy"}));
         socket.send(new Blob([asy_source]));
-        socket.send("options " + JSON.stringify({format: "svg", verbosity: 3, stderrRedir: true}));
-        socket.send("run " + JSON.stringify({main: "main.asy"}));
+        socket.send("options " + JSON.stringify({format: "svg", verbosity: 3, stderrRedir: true, duration: 3.0}));
+        socket.send("start " + JSON.stringify({main: "main.asy"}));
         while (true) {
             console.log(await next_value());
         }
