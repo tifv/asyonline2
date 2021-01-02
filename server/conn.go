@@ -174,15 +174,16 @@ func (conn *Conn) receiveLoop() {
         }
         switch {
         case strings.HasPrefix(message, addPrefix):
+            var err error
             var addArgs struct {
                 Filename *string
                 Hash     *string
                 Restore  *bool
             }
-            if err := json.Unmarshal(
-                []byte(message[len(addPrefix):]), &addArgs,
-            ); err != nil {
-                conn.Deny(reply.Error("'add' arguments are not a correct JSON"))
+            err = json.Unmarshal([]byte(message[len(addPrefix):]), &addArgs)
+            if err != nil {
+                conn.Deny(reply.Error(
+                    "'add' arguments are not a correct JSON"))
                 return
             }
             var contents []byte
@@ -198,67 +199,78 @@ func (conn *Conn) receiveLoop() {
                 conn.Deny(reply.Error("XXX 'restore' not implemented"))
                 return
             }
-            if err := websocket.Message.Receive(conn.ws, &contents); err != nil {
+            err = websocket.Message.Receive(conn.ws, &contents)
+            if err != nil {
                 log.Print(err)
                 return
             }
             // XXX check for total file size
-            if err := conn.task.AddFile(*addArgs.Filename, contents); err != nil {
+            err = conn.task.AddFile(*addArgs.Filename, contents)
+            if err != nil {
                 conn.Deny(err)
                 return
             }
         case strings.HasPrefix(message, optionsPrefix):
+            var err error
             var optionsArgs struct {
                 Duration    *float64
                 Format      *string
                 StderrRedir *bool `json:"stderrRedir"`
                 Verbosity   *int
             }
-            if err := json.Unmarshal(
-                []byte(message[len(optionsPrefix):]), &optionsArgs,
-            ); err != nil {
-                conn.Deny(reply.Error("'options' arguments are not a correct JSON"))
+            err = json.Unmarshal(
+                []byte(message[len(optionsPrefix):]), &optionsArgs)
+            if err != nil {
+                conn.Deny(reply.Error(
+                    "'options' arguments are not a correct JSON"))
                 return
             }
             if optionsArgs.Duration != nil {
-                if err := conn.task.SetDuration(*optionsArgs.Duration); err != nil {
+                err = conn.task.SetDuration(*optionsArgs.Duration)
+                if err != nil {
                     conn.Deny(err)
                     return
                 }
             }
             if optionsArgs.Format != nil {
-                if err := conn.task.SetFormat(*optionsArgs.Format); err != nil {
+                err = conn.task.SetFormat(*optionsArgs.Format)
+                if err != nil {
                     conn.Deny(err)
                     return
                 }
             }
             if optionsArgs.StderrRedir != nil {
-                if err := conn.task.SetStderrRedir(*optionsArgs.StderrRedir); err != nil {
+                err = conn.task.SetStderrRedir(*optionsArgs.StderrRedir)
+                if err != nil {
                     conn.Deny(err)
                     return
                 }
             }
             if optionsArgs.Verbosity != nil {
-                if err := conn.task.SetVerbosity(*optionsArgs.Verbosity); err != nil {
+                err = conn.task.SetVerbosity(*optionsArgs.Verbosity)
+                if err != nil {
                     conn.Deny(err)
                     return
                 }
             }
         case strings.HasPrefix(message, startPrefix):
+            var err error
             var startArgs struct {
                 Main *string
             }
-            if err := json.Unmarshal(
-                []byte(message[len(startPrefix):]), &startArgs,
-            ); err != nil {
-                conn.Deny(reply.Error("'start' arguments are not a correct JSON"))
+            err = json.Unmarshal(
+                []byte(message[len(startPrefix):]), &startArgs)
+            if err != nil {
+                conn.Deny(reply.Error(
+                    "'start' arguments are not a correct JSON"))
                 return
             }
             if startArgs.Main == nil {
                 conn.Deny(reply.Error("'start' must specify a 'main' filename"))
                 return
             }
-            if err := conn.task.Start(*startArgs.Main); err != nil {
+            err = conn.task.Start(*startArgs.Main)
+            if err != nil {
                 conn.Deny(err)
                 return
             }

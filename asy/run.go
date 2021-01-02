@@ -262,8 +262,8 @@ func (task *Task) runLoop(mainname string) {
     sigpipe := func() error {
         select {
         case <-asyProcStarted:
-        default:
-            return errors.New("Process has not started yet")
+        case <-task.Stopped:
+            return errors.New("Process was not started")
         }
         return asyProc.Signal(unix.SIGPIPE)
     }
@@ -274,13 +274,12 @@ func (task *Task) runLoop(mainname string) {
 
     var loose_files = make([]*os.File, 0, 2)
     var close_loose_files = func() {
-        for len(loose_files) > 0 {
-            var file *os.File
-            file, loose_files = loose_files[0], loose_files[1:]
+        for file := range loose_files {
             if file != nil {
                 file.Close()
             }
         }
+        loose_files = loose_files[len(loose_files):]
     }
     defer close_loose_files()
     {
@@ -302,7 +301,8 @@ func (task *Task) runLoop(mainname string) {
                 return task.conn.SendOutput("stdout", output)
             }, sigpipe)
         if err != nil {
-            if errx := task.conn.Complete(err); errx != nil {
+            errx := task.conn.Complete(err)
+            if errx != nil {
                 log.Print(errx)
             }
             return
@@ -321,7 +321,8 @@ func (task *Task) runLoop(mainname string) {
                 return task.conn.SendOutput("stderr", output)
             }, sigpipe)
         if err != nil {
-            if errx := task.conn.Complete(err); errx != nil {
+            errx := task.conn.Complete(err)
+            if errx != nil {
                 log.Print(errx)
             }
             return
@@ -351,7 +352,7 @@ func (task *Task) runLoop(mainname string) {
     {
         var (
             deadRS   = make(chan void)
-            killRS   = make(chan error)
+            killRS   = make(chan error, 1)
             killedRS = make(chan error)
         )
         dead = deadRS
@@ -372,10 +373,7 @@ func (task *Task) runLoop(mainname string) {
                     reason = reply.Error("Process was stopped")
                 }
             }
-            select {
-            case kill <- reason:
-            default:
-            }
+            kill <- reason
         }((chan<- error)(killRS))
     }
 
@@ -423,7 +421,7 @@ func (task *Task) runLoop(mainname string) {
         }
     }
 
-    { // send result
+    {
         var result []byte
         var err error
         result, err = ioutil.ReadFile(outname)
@@ -431,19 +429,24 @@ func (task *Task) runLoop(mainname string) {
             if asyErr == nil {
                 asyErr = reply.Error("No image")
             }
-        } else if err := task.conn.SendResult(task.format, result); err != nil {
-            log.Print(err)
-            return
+        } else {
+            err = task.conn.SendResult(task.format, result)
+            if err != nil {
+                log.Print(err)
+                return
+            }
         }
     }
 
     if asyErr == nil {
-        if err := task.conn.Complete(nil); err != nil {
+        err := task.conn.Complete(nil)
+        if err != nil {
             log.Print(err)
             return
         }
     } else {
-        if err := task.conn.Complete(asyErr); err != nil {
+        err := task.conn.Complete(asyErr)
+        if err != nil {
             log.Print(err)
             return
         }
@@ -493,17 +496,17 @@ func readLoop(stream *os.File,
             } else if err == io.EOF {
                 ended = true
             } else {
-                done <- err
+                done <- err // +1
                 ended = true
             }
         } else if sent > maxSize {
             done <- reply.Error(fmt.Sprintf("Process reached output limit (%dB)",
-                maxSize))
+                maxSize)) // +1
             ended = true
             n -= (sent - maxSize)
             sent = maxSize
             if err := abort(); err != nil {
-                done <- err
+                done <- err // +1
             }
         } else if deadlineEnabled {
             if !deadlineSet {
@@ -513,7 +516,7 @@ func readLoop(stream *os.File,
                     if errors.Is(err, os.ErrNoDeadline) {
                         deadlineEnabled = false
                     } else {
-                        done <- err
+                        done <- err // +1
                         deadlineEnabled = false
                     }
                 } else {
@@ -528,7 +531,7 @@ func readLoop(stream *os.File,
         sendval = append(sendval, readbuf[:n]...)
         if len(sendval) > 0 {
             if err := dest(sendval); err != nil {
-                done <- err
+                done <- err // +1
                 return
             }
         }

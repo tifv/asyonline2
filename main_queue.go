@@ -14,8 +14,8 @@ import (
 type void = struct{}
 
 func main() {
-    q := queue.NewQueue()
-    q.AddBackend("localhost:8081")
+    q := queue.NewQueue([]string{"localhost:8081"})
+    log.Println("queue set up")
     mux := http.NewServeMux()
     mux.Handle("/asy", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
         websocket.Server{
