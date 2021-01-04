@@ -143,8 +143,8 @@ func (conn *Conn) Complete(e error) error {
     return nil
 }
 
-func (conn *Conn) HandleWith(task task) {
-    conn.task = task
+func (conn *Conn) HandleWith(t task) {
+    conn.task = t
     go conn.receiveLoop()
 }
 

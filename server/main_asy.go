@@ -58,6 +58,7 @@ func main() {
             }),
         }.ServeHTTP(w, req)
     }))
+    log.Println("serving…")
     err := (&http.Server{
         Addr:    "localhost:8081",
         Handler: mux,

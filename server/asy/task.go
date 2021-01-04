@@ -3,7 +3,6 @@ package asy
 import (
     "errors"
     "fmt"
-    "io"
     "io/ioutil"
     "log"
     "os"
@@ -75,76 +74,6 @@ func tempDir(stopped <-chan void) (string, error) {
     return workdir, nil
 }
 
-type timer struct {
-    durations chan<- time.Duration
-    start     chan<- void
-    end       <-chan void
-
-    // only timer loop can access this before end
-    duration time.Duration
-}
-
-func newTimer(stopped <-chan void) *timer {
-    durations := make(chan time.Duration)
-    start := make(chan void)
-    end := make(chan void)
-    timer := &timer{durations, start, end, -1}
-    go timer.loop(durations, start, end, stopped)
-    return timer
-}
-
-func (timer *timer) setDuration(duration time.Duration) {
-    select {
-    case timer.durations <- duration:
-    case <-timer.end:
-    }
-}
-
-func (timer *timer) loop(
-    durations <-chan time.Duration, start <-chan void, end chan<- void,
-    stopped <-chan void,
-) {
-    defer close(end)
-    var st time.Time
-    var endish <-chan void
-    var makeEndish = func() <-chan void {
-        endish := make(chan void)
-        go func(et time.Time, endish chan<- void) {
-            time.Sleep(time.Until(et))
-            close(endish)
-        }(st.Add(timer.duration), endish)
-        return endish
-    }
-    for {
-        select {
-        case duration := <-durations:
-            if duration < 0 {
-                panic("timer duration must not be negative")
-            }
-            if duration == 0 {
-                timer.duration = 0
-                return
-            }
-            if timer.duration < 0 || duration < timer.duration {
-                timer.duration = duration
-                if !st.IsZero() {
-                    endish = makeEndish()
-                }
-            }
-        case <-start:
-            start = nil
-            st = time.Now()
-            if timer.duration >= 0 {
-                endish = makeEndish()
-            }
-        case <-stopped:
-            return
-        case <-endish:
-            return
-        }
-    }
-}
-
 func (task *Task) AddFile(filename string, contents []byte) error {
     // XXX impose total limit of 128kiB on input file size
     if task.started {
@@ -179,7 +108,7 @@ func checkFilename(filename string) error {
 }
 
 func (task *Task) SetDuration(duration float64) error {
-    if !(duration > 0) {
+    if duration < 0 {
         return reply.Error("'duration' must be nonnegative")
     }
     task.timer.setDuration(time.Duration(duration / nanosecond))
@@ -274,7 +203,7 @@ func (task *Task) runLoop(mainname string) {
 
     var loose_files = make([]*os.File, 0, 2)
     var close_loose_files = func() {
-        for file := range loose_files {
+        for _, file := range loose_files {
             if file != nil {
                 file.Close()
             }
@@ -367,8 +296,10 @@ func (task *Task) runLoop(mainname string) {
                 reason = nil
             case <-task.timer.end:
                 if task.timer.duration > 0 {
-                    reason = reply.Error(fmt.Sprintf("Process reached time limit (%.1fs)",
-                        float64(task.timer.duration)*nanosecond))
+                    reason = reply.Error(
+                        fmt.Sprintf( "Process reached time limit (%.1fs)",
+                            float64(task.timer.duration)*nanosecond),
+                    )
                 } else {
                     reason = reply.Error("Process was stopped")
                 }
@@ -452,96 +383,6 @@ func (task *Task) runLoop(mainname string) {
         }
     }
 }
-
-func runReader(dest func([]byte) error, abort func() error,
-) (*os.File, <-chan error, error) {
-    streamRead, stream, err := os.Pipe()
-    if err != nil {
-        return nil, nil, err
-    }
-    done := make(chan error, 5)
-    go readLoop(streamRead, dest, abort, done)
-    return stream, done, nil
-}
-
-func readLoop(stream *os.File,
-    dest func([]byte) error, abort func() error,
-    done chan<- error,
-) {
-    defer close(done)
-    defer stream.Close()
-    const (
-        bufSize               = 1 << 10
-        maxSize               = 1 << 19
-        groupBy time.Duration = 20e6 // 20ms
-    )
-    var (
-        readbuf [bufSize]byte
-        sendbuf [1 << 10]byte
-        sendval []byte = sendbuf[:0]
-    )
-    var (
-        deadlineSet     = false
-        deadlineEnabled = true
-        ended           = false
-        sent            = 0
-    )
-    for !ended {
-        n, err := stream.Read(readbuf[:])
-        sent += n
-        if err != nil {
-            if deadlineSet && os.IsTimeout(err) {
-                deadlineSet = false
-                stream.SetReadDeadline(time.Time{})
-            } else if err == io.EOF {
-                ended = true
-            } else {
-                done <- err // +1
-                ended = true
-            }
-        } else if sent > maxSize {
-            done <- reply.Error(fmt.Sprintf("Process reached output limit (%dB)",
-                maxSize)) // +1
-            ended = true
-            n -= (sent - maxSize)
-            sent = maxSize
-            if err := abort(); err != nil {
-                done <- err // +1
-            }
-        } else if deadlineEnabled {
-            if !deadlineSet {
-                if err := stream.SetReadDeadline(
-                    time.Now().Add(groupBy),
-                ); err != nil {
-                    if errors.Is(err, os.ErrNoDeadline) {
-                        deadlineEnabled = false
-                    } else {
-                        done <- err // +1
-                        deadlineEnabled = false
-                    }
-                } else {
-                    deadlineSet = true
-                }
-            }
-            if deadlineSet {
-                sendval = append(sendval, readbuf[:n]...)
-                continue
-            }
-        }
-        sendval = append(sendval, readbuf[:n]...)
-        if len(sendval) > 0 {
-            if err := dest(sendval); err != nil {
-                done <- err // +1
-                return
-            }
-        }
-        sendval = sendbuf[:0]
-    }
-}
-
-var (
-    timeLimitBase error = reply.Error("Process time limit")
-)
 
 func killLoop(proc *os.Process, killed chan<- error,
     kill <-chan error, dead <-chan void,
