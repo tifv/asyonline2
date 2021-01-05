@@ -1,12 +1,12 @@
 ### Server (universal)
 
 WebSocket sub-protocols at "/asy"
-• asyonline/asy
-• asyonline/asy+restore
+• asyonline.asy
+• asyonline.asy+restore
 
 WebSocket sub-protocols at "/asy/interactive"
-• asyonline/asy/interactive
-• asyonline/asy/interactive+restore
+• asyonline.asy.interactive
+• asyonline.asy.interactive+restore
 
 Here
   • "restore" means that server accepts "restore" parameter to "add" messages,

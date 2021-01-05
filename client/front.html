@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" href="data:,">
+  <title>Online Asymptote compiler v2</title>
+<style>
+  a {
+    color: inherit;
+  }
+
+  body {
+    margin: 0;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: row;
+  }
+  body > * {
+    flex: 1;
+  }
+
+  #output_pane {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #output {
+    flex: 1;
+  }
+
+</style>
+</head>
+<body>
+  <textarea id="contents"></textarea>
+  <div id="output_pane">
+    <button id="compile" onclick="compile();">Скомпилировать</button>
+    <div id="output"></div>
+  </div>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script src="/static/js/main.js"></script>
+</body>
+</html>

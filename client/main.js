@@ -1,48 +1,6 @@
-<!DOCTYPE html>
-<meta charset="UTF-8">
-<html>
-<head>
-  <title>Online Asymptote compiler v2</title>
-<style>
-  a {
-    color: inherit;
-  }
-
-  body {
-    margin: 0;
-    width: 100vw;
-    height: 100vh;
-    display: flex;
-    flex-direction: row;
-  }
-  body > * {
-    flex: 1;
-  }
-
-  #output_pane {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
-
-  #output {
-    flex: 1;
-  }
-
-</style>
-</head>
-<body>
-  <textarea id="contents"></textarea>
-  <div id="output_pane">
-    <button id="compile" onclick="compile();">Скомпилировать</button>
-    <div id="output"></div>
-  </div>
-</body>
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
-<script>
     async function compile() {
         var asy_source = $("#contents").val();
-        var socket = new WebSocket("ws://" + document.location.host + "/asy", ["asyonline/asy"]);
+        var socket = new WebSocket("ws://" + document.location.host + "/asy", ["asyonline.asy"]);
         var values = [], antivalues = [], error = null;
         socket.onmessage = function(event) {
             if (antivalues.length > 0) {
@@ -100,5 +58,3 @@
         }
         //socket.close();
     }
-</script>
-</html>

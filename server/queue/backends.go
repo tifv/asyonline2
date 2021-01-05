@@ -5,7 +5,7 @@ import (
 )
 
 type backend struct {
-    addr  string
+    addr string
 }
 
 // create and return websocket connection
@@ -13,7 +13,7 @@ type backend struct {
 func (b *backend) Dial() (*websocket.Conn, error) {
     conn, err := websocket.Dial(
         "ws://"+b.addr+"/asy",
-        "asyonline/asy", // protocol
+        "asyonline.asy",        // protocol
         "http://localhost/asy", // origin
     )
     if err != nil {

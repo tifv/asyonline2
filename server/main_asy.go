@@ -24,12 +24,12 @@ func main() {
     mux := http.NewServeMux()
     mux.Handle("/asy", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
         websocket.Server{
-            Config: websocket.Config{Protocol: []string{"asyonline/asy"}},
+            Config: websocket.Config{Protocol: []string{"asyonline.asy"}},
             Handshake: func(config *websocket.Config, req *http.Request) error {
                 // XXX check origin?
                 for _, protocol := range config.Protocol {
                     switch protocol {
-                    case "asyonline/asy":
+                    case "asyonline.asy":
                         config.Protocol = []string{protocol}
                         return nil
                     }
