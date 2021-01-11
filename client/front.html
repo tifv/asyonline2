@@ -5,40 +5,47 @@
   <link rel="icon" href="data:,">
   <title>Online Asymptote compiler v2</title>
 <style>
-  a {
-    color: inherit;
-  }
-
-  body {
-    margin: 0;
-    width: 100vw;
-    height: 100vh;
-    display: flex;
-    flex-direction: row;
-  }
-  body > * {
-    flex: 1;
-  }
-
-  #output_pane {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
-
-  #output {
-    flex: 1;
-  }
-
+    body {
+        margin: 0;
+        width:  100vw;
+        height: 100vh;
+        overflow: hidden;
+    }
 </style>
+<link rel="stylesheet" href="/static/css/panes.css">
 </head>
 <body>
-  <textarea id="contents"></textarea>
-  <div id="output_pane">
-    <button id="compile" onclick="compile();">Скомпилировать</button>
-    <div id="output"></div>
-  </div>
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-<script src="/static/js/main.js"></script>
+<script>
+    window.aceLoaded = async function() {
+        const cdn = "https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/";
+        const integrity = {
+            ace: "sha512-" +
+                "GoORoNnxst42zE3rYPj4bNBm0Q6ZRXKNH2D9nEmNvV" +
+                "F/z24ywVnijAWVi/09iBiVDQVf3UlZHpzhAJIdd9BXqw==",
+            themeTerminal: "sha512-" +
+                "Tw4o9yJl67xiLPUU5do1oSzDGys0tLrb8NMcVP25Pn" +
+                "6VWRfJART2nZ/X2p9ocWpNcs3jbO2fnnBJmFJzlZ1k1Q==",
+        };
+        await new Promise((resolve, reject) => {
+            var script = document.createElement('script');
+            script.src = cdn + "ace.min.js";
+            script.async = true;
+            script.integrity = integrity.ace;
+            script.addEventListener('error', reject);
+            script.addEventListener('load', resolve);
+            document.body.appendChild(script);
+        });
+        await new Promise((resolve, reject) => {
+            var script = document.createElement('script');
+            script.src = cdn + "theme-terminal.min.js";
+            script.async = true;
+            script.integrity = integrity.themeTerminal;
+            script.addEventListener('error', reject);
+            script.addEventListener('load', resolve);
+            document.body.appendChild(script);
+        });
+    }();
+</script>
+<script type="module" src="/static/js/main.js"></script>
 </body>
 </html>

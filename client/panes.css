@@ -1,0 +1,88 @@
+.pane {
+    min-width:  50px;
+    min-height: 20px;
+}
+
+    .pane__root {
+        position: relative;
+        z-index: 0;
+        width: 100%;
+        height: 100%;
+    }
+    .pane__root > .pane {
+        width: 100%;
+        height: 100%;
+    }
+
+    .pane__horizontal,
+    .pane__vertical
+    {
+        display: flex;
+        align-items: stretch;
+    }
+    .pane__horizontal > .pane,
+    .pane__vertical > .pane
+    {
+        flex-shrink: 0.0;
+        flex-grow:   1.0;
+    }
+    .pane__horizontal > .pane
+    {
+        flex-basis:  20px;
+    }
+    .pane__vertical > .pane
+    {
+        flex-basis:  20px;
+    }
+
+    .pane__horizontal {
+        flex-direction: row;
+    }
+    .pane__horizontal > .pane {
+        height: 100%;
+    }
+
+    .pane__vertical {
+    }
+
+    .pane__leaf {
+    }
+
+
+    .pane--separator {
+        flex-basis: 8px;
+        flex-shrink: 0.0;
+        flex-grow: 0.0;
+        background-color: hsl(120, 0%, 70%);
+    }
+
+        .pane--separator:hover,
+        .pane--separator.pane--separator__active {
+            background-color: hsl(120, 0%, 30%);
+        }
+
+        .pane--separator:last-child
+        {
+            display: none;
+        }
+
+        .pane__horizontal > .pane--separator {
+            cursor: ew-resize;
+        }
+        .pane__vertical > .pane--separator {
+            cursor: ns-resize;
+        }
+
+.pane_separator_overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: -1;
+}
+
+.pane_separator_overlay.pane_separator_overlay__overlay {
+    z-index: 1
+}
+
