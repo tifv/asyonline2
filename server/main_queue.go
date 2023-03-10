@@ -2,13 +2,14 @@ package main
 
 import (
     "net/http"
+
     "golang.org/x/net/websocket"
 
     "errors"
     "log"
 
-    "./server"
-    "./queue"
+    "asyonline/server/queue"
+    "asyonline/server/server"
 )
 
 type void = struct{}
@@ -57,4 +58,3 @@ func main() {
     }).ListenAndServe()
     log.Fatal(err)
 }
-

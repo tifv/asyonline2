@@ -9,8 +9,8 @@ import (
 
     "golang.org/x/net/websocket"
 
-    "../common/stopper"
-    "../server/reply"
+    "asyonline/server/common/stopper"
+    "asyonline/server/server/reply"
 )
 
 type conn interface {
@@ -374,4 +374,3 @@ func (task *Task) receiveLoop() {
         }
     }
 }
-

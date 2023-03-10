@@ -12,8 +12,8 @@ import (
 
     "golang.org/x/sys/unix"
 
-    "../common/stopper"
-    "../server/reply"
+    "asyonline/server/common/stopper"
+    "asyonline/server/server/reply"
 )
 
 type void = struct{}
@@ -297,7 +297,7 @@ func (task *Task) runLoop(mainname string) {
             case <-task.timer.end:
                 if task.timer.duration > 0 {
                     reason = reply.Error(
-                        fmt.Sprintf( "Process reached time limit (%.1fs)",
+                        fmt.Sprintf("Process reached time limit (%.1fs)",
                             float64(task.timer.duration)*nanosecond),
                     )
                 } else {
@@ -399,4 +399,3 @@ func killLoop(proc *os.Process, killed chan<- error,
         killed <- reason
     }
 }
-

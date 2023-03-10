@@ -9,8 +9,8 @@ import (
 
     "golang.org/x/net/websocket"
 
-    "../common/stopper"
-    "../server/reply"
+    "asyonline/server/common/stopper"
+    "asyonline/server/server/reply"
 )
 
 type void = struct{}
@@ -283,4 +283,3 @@ func (conn *Conn) receiveLoop() {
         }
     }
 }
-

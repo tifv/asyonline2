@@ -2,13 +2,15 @@ package main
 
 import (
     "net/http"
-    "golang.org/x/net/websocket"
+
+    "github.com/gorilla/websocket" // XXX
 
     "errors"
+    // XXX
     "log"
 
-    "./server"
-    "./asy"
+    "asyonline/server/asy"
+    "asyonline/server/server"
 )
 
 type void = struct{}
@@ -21,8 +23,14 @@ func main() {
     for i := 0; i < capacity; i++ {
         openGate()
     }
+    wsup := websocket.Upgrader{
+        ReadBufferSize:  1 << 12,
+        WriteBufferSize: 1 << 12,
+    }
     mux := http.NewServeMux()
     mux.Handle("/asy", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+        // XXX check the protocol
+        conn, err := wsup.Upgrade()
         websocket.Server{
             Config: websocket.Config{Protocol: []string{"asyonline.asy"}},
             Handshake: func(config *websocket.Config, req *http.Request) error {
@@ -58,11 +66,11 @@ func main() {
             }),
         }.ServeHTTP(w, req)
     }))
-    log.Println("serving…")
-    err := (&http.Server{
+    s := &http.Server{
         Addr:    "localhost:8081",
         Handler: mux,
-    }).ListenAndServe()
+    }
+    log.Println("serving…")
+    err := s.ListenAndServe()
     log.Fatal(err)
 }
-

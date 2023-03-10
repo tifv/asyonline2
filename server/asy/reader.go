@@ -4,11 +4,10 @@ import (
     "errors"
     "fmt"
     "io"
-    //"log"
     "os"
     "time"
 
-    "../server/reply"
+    "asyonline/server/server/reply"
 )
 
 func runReader(dest func([]byte) error, abort func() error,
@@ -29,7 +28,7 @@ func readLoop(stream *os.File,
     defer close(done)
     defer stream.Close()
     const (
-        bufSize               = 1 << 10
+        bufSize               = 1 << 12
         maxSize               = 1 << 19
         groupBy time.Duration = 20e6 // 20ms
     )
@@ -97,4 +96,3 @@ func readLoop(stream *os.File,
         sendval = sendbuf[:0]
     }
 }
-
